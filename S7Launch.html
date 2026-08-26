@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MISSION COMMAND: ARTEMIS S7 v18.6</title>
+    <style>
+        :root { 
+            --nasa-blue: #0b3d91; 
+            --artemis-red: #fc3d39; 
+            --lunar-grey: #f4f4f4; 
+            --text-dark: #212121; 
+            --sky-blue: #87CEEB;
+            --horizon-white: #e1f5fe;
+            --go-green: #2e7d32;
+            --error-red: #c62828;
+        }
+
+        body { 
+            background: var(--lunar-grey); 
+            color: var(--text-dark); 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            padding: 10px; 
+            touch-action: manipulation; 
+            overflow-x: hidden;
+        }
+
+        .hud { 
+            border: 3px solid var(--nasa-blue); 
+            max-width: 800px; 
+            margin: auto; 
+            padding: 20px; 
+            background: #ffffff; 
+            border-radius: 8px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .launch-pad { 
+            height: 120px; 
+            border-bottom: 2px solid #ddd; 
+            position: relative; 
+            margin: 15px 0; 
+            background: linear-gradient(to bottom, var(--sky-blue) 0%, var(--horizon-white) 100%); 
+            overflow: hidden; 
+            border-radius: 5px; 
+        }
+
+        #rocket { 
+            position: absolute; 
+            bottom: 10px; 
+            left: 50%; 
+            transform: translateX(-50%) rotate(-45deg); 
+            font-size: 40px; 
+            transition: bottom 3s ease-in, opacity 2s ease-in; 
+            z-index: 5;
+        }
+
+        .takeoff { bottom: 1000px !important; opacity: 0; }
+        
+        .shake { animation: shake 0.5s ease-in-out infinite; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(-50%) rotate(-45deg); }
+            25% { transform: translateX(-48%) rotate(-43deg); }
+            75% { transform: translateX(-52%) rotate(-47deg); }
+        }
+
+        .fuel-bar { 
+            width: 100%; 
+            background: #eee; 
+            border: 1px solid #ccc; 
+            height: 30px; 
+            margin-top: 5px; 
+            position: relative; 
+            border-radius: 15px; 
+            overflow: hidden; 
+        }
+
+        #fuel-fill { 
+            background: var(--nasa-blue); 
+            width: 0%; 
+            height: 100%; 
+            transition: width 0.5s; 
+        }
+
+        #total-text { 
+            position: absolute; 
+            width: 100%; 
+            text-align: center; 
+            color: #fff; 
+            font-size: 12px; 
+            line-height: 30px; 
+            font-weight: bold; 
+            top: 0; left: 0; z-index: 5; 
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5); 
+        }
+
+        .mode-toggle { 
+            display: flex; 
+            background: #eee; 
+            border-radius: 25px; 
+            margin: 15px 0; 
+            padding: 5px; 
+        }
+
+        .mode-btn { 
+            flex: 1; 
+            border: none; 
+            background: none; 
+            padding: 12px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 12px; 
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active { background: var(--nasa-blue); color: white; }
+
+        .grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 12px; 
+            margin-top: 10px; 
+        }
+
+        .p-btn { 
+            background: #ffffff; 
+            border: 2px solid var(--nasa-blue); 
+            color: var(--nasa-blue); 
+            padding: 15px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            transition: all 0.3s;
+        }
+
+        .q-text { 
+            font-size: 1.1em; 
+            color: var(--text-dark); 
+            margin-bottom: 20px; 
+            border-left: 5px solid var(--artemis-red); 
+            padding-left: 15px; 
+            line-height: 1.5; 
+            font-weight: bold; 
+        }
+
+        .ans-btn { 
+            display: block; 
+            width: 100%; 
+            padding: 16px; 
+            margin: 8px 0; 
+            background: #f9f9f9; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            text-align: left; 
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #feedback { 
+            margin: 15px 0; 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            display: none; 
+            background: #f0f4ff; 
+        }
+
+        .nav-btn { 
+            background: var(--nasa-blue); 
+            color: #fff; 
+            font-weight: bold; 
+            padding: 18px; 
+            border: none; 
+            width: 100%; 
+            cursor: pointer; 
+            border-radius: 8px; 
+            display: none; 
+            margin-top: 10px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="hud">
+        <h1 style="text-align:center; color: var(--nasa-blue);">S7: MISSION COMMAND</h1>
+        <div class="launch-pad"><div id="rocket">🚀</div></div>
+        <div class="fuel-bar">
+            <div id="total-text">FLIGHT READINESS: 0%</div>
+            <div id="fuel-fill"></div>
+        </div>
+        <div id="menu">
+            <div class="mode-toggle">
+                <button id="mode-sprint" class="mode-btn active" onclick="setMode('sprint')">TRAINING SPRINTS</button>
+                <button id="mode-sim" class="mode-btn" onclick="setMode('sim')">MISSION SIMULATION</button>
+            </div>
+            <div class="grid">
+                <button class="p-btn" onclick="start(0)">01. ECONOMICS & EQUITIES <span id="s0" style="display:block; font-size:10px;">0%</span></button>
+                <button class="p-btn" onclick="start(1)">02. DEBT & OPTIONS <span id="s1" style="display:block; font-size:10px;">0%</span></button>
+                <button class="p-btn" onclick="start(2)">03. SUITABILITY <span id="s2" style="display:block; font-size:10px;">0%</span></button>
+                <button class="p-btn" onclick="start(3)">04. REGULATIONS <span id="s3" style="display:block; font-size:10px;">0%</span></button>
+            </div>
+        </div>
+        <div id="game" style="display:none;">
+            <div id="status-line" style="font-size:11px; color:#666; font-weight:bold; margin-bottom:10px;"></div>
+            <div id="q-area"></div>
+            <div id="feedback"></div>
+            <button id="next" class="nav-btn" onclick="next()">NEXT GATE ></button>
+        </div>
+    </div>
+<script>
+// --- 1. DATA LIBRARIES ---
+const sprintLib = [
+[ // 01. ECONOMICS & EQUITIES (2 Questions)
+    {
+        q: "A stock split will result in which of the following changes?", 
+        c: ["The par value per share decreases", "The total market capitalization increases"], 
+        a: 0, 
+        f: "Logic: A stock split increases the number of outstanding shares and reduces the par value per share proportionately, but the total market value of the company remains completely unchanged."
+    },
+    {
+        q: "Which of the following economic indicators is considered a 'leading' indicator by the Conference Board?", 
+        c: ["Building permits", "Corporate profits"], 
+        a: 0, 
+        f: "Logic: Building permits indicate future economic activity and spending on labor/materials, making them a leading indicator. Corporate profits confirm past performance and are considered lagging."
+    }
+], 
+[ // 02. DEBT & OPTIONS (2 Questions)
+    {
+        q: "What is the maximum potential loss for a customer who purchases 1 XYZ Nov 50 Call option contract?", 
+        c: ["The premium paid for the contract", "Unlimited risk"], 
+        a: 0, 
+        f: "Logic: The buyer (holder) of any option contract can only lose the premium they originally paid. They have the right, but not the obligation, to exercise."
+    },
+    {
+        q: "Which of the following types of municipal bonds generally requires voter approval before issuance?", 
+        c: ["General Obligation (GO) Bond", "Revenue Bond"], 
+        a: 0, 
+        f: "Logic: GO bonds are backed by taxes. Because they place a burden on taxpayers, they typically require voter approval. Revenue bonds are backed by facility fees and do not."
+    }
+], 
+[ // 03. SUITABILITY (2 Questions)
+    {
+        q: "Which investment is most suitable for a client whose primary objectives are preservation of capital and immediate liquidity?", 
+        c: ["Money market fund", "Treasury bond fund"], 
+        a: 0, 
+        f: "Logic: Money market funds invest in short-term, high-quality debt aiming to maintain a stable $1 NAV, offering the highest safety and liquidity."
+    },
+    {
+        q: "A high-income client in the 37% tax bracket is looking for yield. Which of the following should they strongly consider?", 
+        c: ["Municipal bonds", "Corporate bonds"], 
+        a: 0, 
+        f: "Logic: Municipal bond interest is generally exempt from federal income tax, providing a higher 'tax-equivalent yield' for investors in the highest tax brackets."
+    }
+], 
+[ // 04. REGULATIONS (2 Questions)
+    {
+        q: "Under FINRA rules, customer account statements for inactive accounts must be sent at least:", 
+        c: ["Quarterly", "Monthly"], 
+        a: 0, 
+        f: "Logic: Broker-dealers are required to send statements at least quarterly for inactive accounts, but must send them monthly if there is any activity in the account."
+    },
+    {
+        q: "To open a margin account, which of the following documents is mandatory?", 
+        c: ["Hypothecation agreement", "Loan consent agreement"], 
+        a: 0, 
+        f: "Logic: The hypothecation agreement is mandatory as it allows the firm to pledge the client's securities as collateral. The loan consent form is optional."
+    }
+]
+];
+
+const simLib = [
+[ // 01. ECONOMICS & EQUITIES (4 Questions)
+    {
+        q: "If the Federal Reserve wants to stimulate a sluggish economy, it will most likely take which of the following actions?",
+        c: ["Buy Treasury securities in the open market", "Raise the discount rate", "Increase the reserve requirement", "Sell Treasury securities in the open market"],
+        a: 0,
+        f: "Logic: Buying securities injects cash into the banking system, expanding the money supply, lowering interest rates, and stimulating economic growth."
+    },
+    {
+        q: "An analyst utilizing 'fundamental analysis' to evaluate a corporation would be most interested in which of the following data points?",
+        c: ["The company's Price-to-Earnings (P/E) ratio", "A 200-day moving average of the stock's price", "The stock's trading volume over the last week", "Short interest levels in the broader market"],
+        a: 0,
+        f: "Logic: Fundamental analysis focuses on the intrinsic value of a company using financial statements and valuation metrics like the P/E ratio. The other choices are technical analysis tools."
+    },
+    {
+        q: "On the ex-dividend date of a declared cash dividend, the opening market price of the stock is adjusted by the exchange. What happens to the price?",
+        c: ["It is reduced by the exact amount of the dividend", "It is increased by the exact amount of the dividend", "It is left unchanged from the previous day's close", "It is determined entirely by pre-market trading activity"],
+        a: 0,
+        f: "Logic: Because new buyers on the ex-date are no longer entitled to receive the dividend, the exchange automatically reduces the stock's opening price by the dividend amount to reflect the value leaving the company."
+    },
+    {
+        q: "A 'defensive' stock—one that tends to remain stable during economic downturns—would most likely belong to a company in which of the following industries?",
+        c: ["Public utilities", "Automobile manufacturing", "Commercial airlines", "Luxury retail goods"],
+        a: 0,
+        f: "Logic: Defensive stocks provide stable earnings regardless of the business cycle because they supply basic needs. Public utilities, food, and pharmaceuticals are classic defensive sectors."
+    }
+],
+[ // 02. DEBT & OPTIONS (4 Questions)
+    {
+        q: "A client writes 1 ABC Jan 50 Put at 4. At expiration, ABC is trading at 42. What is the client's total profit or loss on the position?",
+        c: ["$400 Loss", "$800 Loss", "$400 Profit", "$800 Profit"],
+        a: 0,
+        f: "Logic: The put is in-the-money and will be exercised, forcing the writer to buy the stock at 50. With a market value of 42, that's an $8 per share loss. Offset by the $4 premium collected upfront, the net loss is $4 per share, or $400 total."
+    },
+    {
+        q: "Which of the following best describes the structure of a Collateralized Mortgage Obligation (CMO)?",
+        c: ["A mortgage-backed security structured into multiple tranches with varying maturities", "A bond backed directly by the physical equipment of a major corporation", "A pass-through security explicitly guaranteed by the U.S. government", "A short-term debt instrument issued by a municipality for housing projects"],
+        a: 0,
+        f: "Logic: CMOs pool mortgages and divide them into slices called 'tranches,' which offer investors different maturity timelines and distinct risk profiles."
+    },
+    {
+        q: "Which of the following mutual fund share classes typically charges a front-end sales load?",
+        c: ["Class A shares", "Class B shares", "Class C shares", "Institutional shares"],
+        a: 0,
+        f: "Logic: Class A shares charge an upfront sales load (a fee paid at the time of purchase) but generally have lower ongoing 12b-1 expenses compared to Class B or C shares."
+    },
+    {
+        q: "What is the primary risk factor associated with holding long-term zero-coupon bonds?",
+        c: ["High interest rate risk (price volatility)", "Severe reinvestment risk", "Low liquidity in the secondary market", "The threat of an early call by the issuer"],
+        a: 0,
+        f: "Logic: Because zero-coupon bonds pay no periodic interest, they have the longest duration possible. This makes their secondary market prices highly sensitive and volatile in response to interest rate changes."
+    }
+],
+[ // 03. SUITABILITY (4 Questions)
+    {
+        q: "A client holds a large, concentrated position in a single tech stock. They are concerned about a near-term market drop but refuse to sell the shares because they want long-term capital gains treatment. Which strategy is most appropriate?",
+        c: ["Buy put options on the stock", "Sell call options on the stock", "Buy call options on the stock", "Sell put options on the stock"],
+        a: 0,
+        f: "Logic: A 'protective put' acts as an insurance policy. It gives the client the right to sell their shares at a set strike price, establishing a hard floor against downside risk without having to sell the stock today."
+    },
+    {
+        q: "An investor is 30 years old, has a high tolerance for risk, and is saving aggressively for a retirement that is 35 years away. Which asset allocation model is most suitable?",
+        c: ["80% Equities / 20% Bonds", "50% Equities / 50% Bonds", "20% Equities / 80% Bonds", "100% Money Market Funds"],
+        a: 0,
+        f: "Logic: A young investor with a long time horizon and high risk tolerance should weight their portfolio heavily toward equities to capture long-term compounding growth and outpace inflation."
+    },
+    {
+        q: "A client wants to fund their grandchild's college education. They want to maintain control of the assets, make substantial lump-sum contributions, and enjoy tax-free growth. The best recommendation is:",
+        c: ["A 529 College Savings Plan", "A Coverdell Education Savings Account", "A custodial UGMA/UTMA account", "A zero-coupon Treasury bond ladder"],
+        a: 0,
+        f: "Logic: 529 plans allow the donor to maintain total control of the account, accept large contributions (including 5-year front-loading), and offer tax-free withdrawals for qualified educational expenses."
+    },
+    {
+        q: "Which of the following investments is most appropriate for a conservative retiree whose primary objective is generating stable, monthly income?",
+        c: ["A Government National Mortgage Association (GNMA) fund", "A small-cap growth mutual fund", "A portfolio of deep-discount zero-coupon bonds", "A highly leveraged exchange-traded fund (ETF)"],
+        a: 0,
+        f: "Logic: GNMA funds pay out both principal and interest on a monthly basis, perfectly matching a retiree's need for monthly income. Furthermore, they are backed by the explicit guarantee of the U.S. government."
+    }
+],
+[ // 04. REGULATIONS (4 Questions)
+    {
+        q: "Under Regulation T, if a customer purchases securities in a standard cash account, payment must be received by the broker-dealer no later than:",
+        c: ["Trade date plus 4 business days (T+4)", "Trade date plus 2 business days (T+2)", "The exact same day as the trade execution", "Trade date plus 5 business days (T+5)"],
+        a: 0,
+        f: "Logic: While regular-way settlement for stocks is T+2, the Federal Reserve's Regulation T allows a maximum of two additional business days (T+4) for the customer to actually pay for the trade."
+    },
+    {
+        q: "If a registered representative wishes to open a personal trading account at another broker-dealer, what must occur prior to executing any trades?",
+        c: ["They must obtain prior written consent from their employing broker-dealer", "They must obtain prior written consent directly from FINRA", "No consent is required as long as they only trade mutual funds", "They must wait a mandatory 90 days after employment begins"],
+        a: 0,
+        f: "Logic: FINRA rules strictly mandate that associated persons obtain written consent from their employer before opening an outside brokerage account to prevent front-running and conflicts of interest."
+    },
+    {
+        q: "A customer insists on placing a trade that the registered representative believes is completely unsuitable based on the client's risk profile. How should the representative proceed?",
+        c: ["Execute the trade but mark the order ticket as 'unsolicited'", "Refuse to execute the trade under any circumstances to uphold suitability rules", "Execute the trade only after the client signs a written waiver of liability", "Consult with a FINRA arbitrator before executing the order"],
+        a: 0,
+        f: "Logic: If a customer insists on a trade after being warned it is unsuitable, the representative must follow the client's instructions but must clearly mark the ticket 'unsolicited' to protect the firm from suitability claims."
+    },
+    {
+        q: "According to FINRA recordkeeping requirements, how long must a broker-dealer retain records of formal customer complaints?",
+        c: ["4 years", "3 years", "5 years", "6 years"],
+        a: 0,
+        f: "Logic: While most standard broker-dealer records fall under the 3-year retention rule, FINRA specifically requires that records of customer complaints be kept on file for a minimum of 4 years."
+    }
+]
+];
+
+// --- 2. ENGINE ---
+let audioCtx;
+let gameState = {
+    mode: 'sprint',
+    idx: 0,
+    currentPillar: 0,
+    sessionScore: 0,
+    activeSet: [],
+    originalSetLength: 0
+};
+
+let globalScores = {
+    sprint: [0, 0, 0, 0],
+    sim: [0, 0, 0, 0]
+};
+
+// ==========================================
+// UTILITIES & RESET
+// ==========================================
+function hardReset() {
+    if (confirm("COMMAND RESET: This will wipe your global scores and mission progress. Proceed?")) {
+        localStorage.clear();
+        window.location.reload(); 
+    }
+}
+
+function clearMissionProgress() {
+    localStorage.removeItem('artemis_save');
+    let resumeBtn = document.getElementById('resume-btn');
+    if (resumeBtn) resumeBtn.style.display = 'none';
+}
+
+function saveMissionProgress() {
+    localStorage.setItem('artemis_save', JSON.stringify(gameState));
+}
+
+function loadMissionProgress() {
+    const saved = localStorage.getItem('artemis_save');
+    if (!saved) return;
+    gameState = JSON.parse(saved);
+    
+    document.getElementById('mode-sprint').className = gameState.mode === 'sprint' ? 'mode-btn active' : 'mode-btn';
+    document.getElementById('mode-sim').className = gameState.mode === 'sim' ? 'mode-btn active' : 'mode-btn';
+    
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('game').style.display = 'block';
+    showQuestion();
+}
+
+// ==========================================
+// CORE ENGINE
+// ==========================================
+function setMode(m) {
+    if (gameState.mode !== m) {
+        // 1. Update the active mode
+        gameState.mode = m;
+        
+        // 2. Toggle the UI button highlighting
+        document.getElementById('mode-sprint').className = (m === 'sprint') ? 'mode-btn active' : 'mode-btn';
+        document.getElementById('mode-sim').className = (m === 'sim') ? 'mode-btn active' : 'mode-btn';
+        
+        // 3. Clear any active saved game and hide the resume button
+        localStorage.removeItem('artemis_save');
+        let resumeBtn = document.getElementById('resume-btn');
+        if (resumeBtn) {
+            resumeBtn.style.display = 'none';
+        }
+        
+        // 4. Refresh the fuel bar and pillar scores for the newly selected mode
+        updateFuel(); 
+    }
+}
+
+function start(pillar) {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    gameState.currentPillar = pillar;
+    gameState.idx = 0;
+    gameState.sessionScore = 0;
+    
+    const lib = (gameState.mode === 'sprint') ? sprintLib[pillar] : simLib[pillar];
+    
+    // Configured for 2 questions in Sprint, 4 in Simulation
+    const target = (gameState.mode === 'sprint') ? 2 : 4;
+    
+    let pool = [...lib].sort(() => 0.5 - Math.random());
+    gameState.activeSet = pool.slice(0, Math.min(target, lib.length));
+    gameState.originalSetLength = gameState.activeSet.length;
+    
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('game').style.display = 'block';
+    showQuestion();
+}
+
+function showQuestion() {
+    const q = gameState.activeSet[gameState.idx];
+    document.getElementById('status-line').innerText = q.isRetry 
+        ? `PILLAR 0${gameState.currentPillar + 1} | RETRYING MISSED OBJECTIVE` 
+        : `PILLAR 0${gameState.currentPillar + 1} | GATE ${gameState.idx + 1} OF ${gameState.originalSetLength}`;
+    
+    let choices = q.c.map((text, i) => ({ text, isCorrect: i === q.a })).sort(() => 0.5 - Math.random());
+    let html = `<div class="q-text">${q.q}</div>`;
+    choices.forEach(c => html += `<button class="ans-btn" onclick="check(${c.isCorrect}, this)">${c.text}</button>`);
+    
+    document.getElementById('q-area').innerHTML = html;
+    document.getElementById('feedback').style.display = 'none';
+    document.getElementById('next').style.display = 'none';
+}
+
+function check(isCorrect, btn) {
+    const q = gameState.activeSet[gameState.idx];
+    document.querySelectorAll('.ans-btn').forEach(b => b.disabled = true);
+    
+    if (isCorrect) {
+        btn.style.background = "#e8f5e9";
+        if (!q.isRetry) gameState.sessionScore++;
+    } else {
+        btn.style.background = "#ffebee";
+        if (gameState.mode === 'sprint') {
+            let retry = JSON.parse(JSON.stringify(q));
+            retry.isRetry = true;
+            gameState.activeSet.push(retry);
+        }
+    }
+    document.getElementById('feedback').innerHTML = `<strong>${isCorrect ? '✅' : '❌'}</strong> ${q.f}`;
+    document.getElementById('feedback').style.display = 'block';
+    document.getElementById('next').style.display = 'block';
+    saveMissionProgress();
+}
+
+function next() {
+    gameState.idx++;
+    if (gameState.idx < gameState.activeSet.length) showQuestion();
+    else endSession();
+}
+
+function endSession() {
+    const pct = Math.round((gameState.sessionScore / gameState.originalSetLength) * 100);
+    globalScores[gameState.mode][gameState.currentPillar] = Math.max(pct, globalScores[gameState.mode][gameState.currentPillar]);
+    localStorage.setItem('artemis_global', JSON.stringify(globalScores));
+    
+    clearMissionProgress();
+    document.getElementById('game').style.display = 'none';
+    document.getElementById('menu').style.display = 'block';
+    updateFuel();
+}
+
+function updateFuel() {
+    const scores = globalScores[gameState.mode] || [0, 0, 0, 0];
+    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / 4);
+    document.getElementById('fuel-fill').style.width = avg + '%';
+    document.getElementById('total-text').innerText = `READINESS: ${avg}%`;
+    scores.forEach((s, i) => {
+        let el = document.getElementById(`s${i}`);
+        if(el) { el.innerText = s + '%'; el.style.color = s >= 73 ? "#2e7d32" : "#666"; }
+    });
+
+    // Launch animation logic triggers strictly at >= 73%
+    const rocket = document.getElementById('rocket');
+    if (avg >= 73) {
+        rocket.classList.add('shake');
+        setTimeout(() => {
+            rocket.classList.remove('shake');
+            rocket.classList.add('takeoff');
+        }, 1000);
+    } else {
+        rocket.classList.remove('takeoff', 'shake');
+    }
+
+    // Add UI buttons if they don't exist
+    const menu = document.getElementById('menu');
+    if (localStorage.getItem('artemis_save') && !document.getElementById('resume-btn')) {
+        let btn = document.createElement('button');
+        btn.id = 'resume-btn';
+        btn.className = 'nav-btn';
+        btn.style.display = 'block';
+        btn.style.background = 'var(--artemis-red)';
+        btn.innerText = '⚠️ RESUME MISSION';
+        btn.onclick = loadMissionProgress;
+        menu.prepend(btn);
+    }
+    if (!document.getElementById('reset-btn')) {
+        let rBtn = document.createElement('button');
+        rBtn.id = 'reset-btn';
+        rBtn.style.cssText = "background-color: var(--artemis-red); color: white; margin-top: 10px; width: 100%; padding: 15px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;";
+        rBtn.innerText = 'COMMAND RESET (WIPE DATA)';
+        rBtn.onclick = hardReset;
+        menu.appendChild(rBtn);
+    }
+}
+
+window.onload = () => {
+    const saved = localStorage.getItem('artemis_global');
+    if (saved) globalScores = JSON.parse(saved);
+    updateFuel();
+};
+</script>
+</body>
+</html>
